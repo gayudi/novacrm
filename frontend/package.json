@@ -1,0 +1,38 @@
+{
+  "name": "@nova/frontend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview --host 127.0.0.1"
+  },
+  "dependencies": {
+    "@radix-ui/react-dialog": "1.1.6",
+    "@radix-ui/react-label": "2.1.2",
+    "@radix-ui/react-slot": "1.1.2",
+    "class-variance-authority": "0.7.1",
+    "clsx": "2.1.1",
+    "lucide-react": "0.468.0",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "react-markdown": "10.1.0",
+    "react-router-dom": "7.18.4",
+    "recharts": "2.15.4",
+    "remark-gfm": "4.0.1",
+    "sonner": "2.0.5",
+    "tailwind-merge": "2.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.15.30",
+    "@types/react": "19.1.6",
+    "@types/react-dom": "19.1.6",
+    "@vitejs/plugin-react": "4.5.2",
+    "autoprefixer": "10.4.21",
+    "postcss": "8.5.32",
+    "tailwindcss": "3.4.17",
+    "typescript": "5.8.3",
+    "vite": "6.4.5"
+  }
+}

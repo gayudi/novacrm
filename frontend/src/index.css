@@ -1,0 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 220 33% 98%;
+    --foreground: 222 38% 17%;
+    --primary: 223 83% 57%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 20% 96%;
+    --secondary-foreground: 222 38% 25%;
+    --muted: 220 20% 96%;
+    --muted-foreground: 218 13% 48%;
+    --accent: 222 70% 96%;
+    --destructive: 0 75% 54%;
+    --border: 220 22% 91%;
+    --input: 218 20% 86%;
+    --ring: 223 83% 57%;
+  }
+  * { @apply border-border; }
+  body { @apply m-0 bg-background text-foreground antialiased; }
+  button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
+  :focus-visible { @apply outline-none ring-2 ring-ring ring-offset-2; }
+  input, select, textarea { font-size: 16px; }
+}
+@layer components {
+  .page-heading { @apply text-2xl font-bold tracking-tight text-slate-900; }
+  .eyebrow { @apply text-[10px] font-semibold uppercase tracking-[0.16em]; }
+  .field { @apply flex h-10 w-full rounded-md border border-input bg-white px-3 py-2 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50; }
+  .table-head { @apply bg-slate-50/80 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}

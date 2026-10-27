@@ -1,0 +1,274 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  SALES
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  CONVERTED
+  LOST
+}
+
+enum LeadSource {
+  WALK_IN
+  WEBSITE
+  SOCIAL_MEDIA
+  REFERRAL
+  MARKETPLACE
+  EVENT
+  INSTAGRAM
+  FACEBOOK
+  TIKTOK
+}
+
+enum OpportunityStage {
+  PROSPECTING
+  QUALIFIED
+  QUALIFICATION
+  NEEDS_ANALYSIS
+  PROPOSAL
+  NEGOTIATION
+  WON
+  LOST
+}
+
+enum ActivityType {
+  CALL
+  EMAIL
+  MEETING
+  TASK
+  FOLLOW_UP
+  WHATSAPP
+  STORE_VISIT
+}
+
+enum Branch {
+  JAKARTA
+  BANDUNG
+  SURABAYA
+  MEDAN
+  SEMARANG
+}
+
+enum CustomerStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum ActivityStatus {
+  PLANNED
+  COMPLETED
+  CANCELLED
+}
+
+enum TransactionStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+}
+
+model User {
+  id           String             @id @default(cuid())
+  name         String
+  email        String             @unique
+  passwordHash String
+  role         Role               @default(SALES)
+  active       Boolean            @default(true)
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  customers    Customer[]
+  leads        Lead[]
+  opportunities Opportunity[]
+  activities   Activity[]
+  transactions SalesTransaction[]
+  @@map("users")
+}
+
+model Customer {
+  id            String             @id @default(cuid())
+  name          String
+  email         String?            @unique
+  phone         String
+  city          String
+  address       String?
+  segment       String             @default("REGULAR")
+  status        CustomerStatus     @default(ACTIVE)
+  branch        Branch?
+  notes         String?
+  ownerId       String
+  owner         User               @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  contacts      Contact[]
+  leads         Lead[]
+  opportunities Opportunity[]
+  activities    Activity[]
+  transactions  SalesTransaction[]
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  @@index([ownerId])
+  @@index([name])
+  @@index([branch, status])
+  @@map("customers")
+}
+
+model Contact {
+  id         String   @id @default(cuid())
+  name       String
+  email      String?
+  phone      String
+  title      String?
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  @@index([customerId])
+  @@map("contacts")
+}
+
+model Lead {
+  id         String     @id @default(cuid())
+  name       String
+  email      String?
+  phone      String
+  source     LeadSource @default(WALK_IN)
+  branch     Branch?
+  status     LeadStatus @default(NEW)
+  interest   String?
+  notes      String?
+  customerId String?
+  customer   Customer?  @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  ownerId    String
+  owner      User       @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  convertedAt DateTime?
+  convertedOpportunityId String? @unique
+  convertedOpportunity Opportunity? @relation("LeadConversion", fields: [convertedOpportunityId], references: [id], onDelete: Restrict)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  @@index([ownerId])
+  @@index([status, source])
+  @@map("leads")
+}
+
+model Opportunity {
+  id                String           @id @default(cuid())
+  name              String
+  stage             OpportunityStage @default(QUALIFICATION)
+  branch            Branch?
+  lostReason        String?
+  value             Decimal          @db.Decimal(18, 2)
+  probability       Int              @default(20)
+  expectedCloseDate  DateTime
+  notes             String?
+  customerId        String
+  customer          Customer         @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  ownerId           String
+  owner             User             @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  activities        Activity[]
+  transactions      SalesTransaction[]
+  sourceLead        Lead? @relation("LeadConversion")
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  @@index([stage])
+  @@index([ownerId])
+  @@index([customerId])
+  @@map("opportunities")
+}
+
+model Activity {
+  id            String         @id @default(cuid())
+  subject       String
+  type          ActivityType   @default(TASK)
+  branch        Branch?
+  status        ActivityStatus @default(PLANNED)
+  dueAt         DateTime
+  notes         String?
+  customerId    String?
+  customer      Customer?      @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  opportunityId String?
+  opportunity   Opportunity?   @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
+  ownerId       String
+  owner         User           @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  @@index([dueAt, status])
+  @@index([ownerId])
+  @@index([customerId])
+  @@index([opportunityId])
+  @@map("activities")
+}
+
+model Product {
+  id          String                @id @default(cuid())
+  name        String
+  sku         String                @unique
+  brand       String
+  category    String                @default("Smartphone")
+  description String?
+  price       Decimal               @db.Decimal(18, 2)
+  stock       Int                   @default(0)
+  active      Boolean               @default(true)
+  items       SalesTransactionItem[]
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+  @@index([brand])
+  @@map("products")
+}
+
+model SalesTransaction {
+  id          String                 @id @default(cuid())
+  invoice     String                 @unique
+  branch      Branch?
+  opportunityId String?
+  opportunity Opportunity?          @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
+  customerId  String
+  customer    Customer               @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  salespersonId String
+  salesperson User                   @relation(fields: [salespersonId], references: [id], onDelete: Restrict)
+  status      TransactionStatus      @default(COMPLETED)
+  soldAt      DateTime               @default(now())
+  total       Decimal                @db.Decimal(18, 2)
+  notes       String?
+  items       SalesTransactionItem[]
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+  @@index([soldAt, status])
+  @@index([customerId])
+  @@index([salespersonId])
+  @@index([opportunityId])
+  @@index([branch, soldAt])
+  @@map("sales_transactions")
+}
+
+model SalesTransactionItem {
+  id            String           @id @default(cuid())
+  transactionId String
+  transaction   SalesTransaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  productId     String
+  product       Product          @relation(fields: [productId], references: [id], onDelete: Restrict)
+  quantity      Int
+  unitPrice     Decimal          @db.Decimal(18, 2)
+  subtotal      Decimal          @db.Decimal(18, 2)
+  @@unique([transactionId, productId])
+  @@index([productId])
+  @@map("sales_transaction_items")
+}
+
+model SeedBatch {
+  id          String   @id
+  periodStart DateTime
+  periodEnd   DateTime
+  counts      Json
+  createdAt   DateTime @default(now())
+  @@map("seed_batches")
+}

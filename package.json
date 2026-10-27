@@ -1,0 +1,23 @@
+{
+  "name": "nova-retail-crm",
+  "private": true,
+  "version": "1.0.0",
+  "workspaces": ["backend", "frontend"],
+  "scripts": {
+    "build": "npm run build --workspaces",
+    "test": "npm run test --workspace backend",
+    "test:integration": "npm run test:integration --workspace backend",
+    "db:generate": "npm run db:generate --workspace backend",
+    "db:deploy": "npm run db:deploy --workspace backend",
+    "db:seed": "npm run db:seed --workspace backend",
+    "dev:backend": "npm run dev --workspace backend",
+    "dev:frontend": "npm run dev --workspace frontend"
+  },
+  "engines": { "node": ">=22" },
+  "overrides": {
+    "vite": "6.4.5",
+    "prisma": "6.19.3",
+    "deepmerge-ts": "^8.0.0",
+    "effect": "^3.20.0"
+  }
+}

@@ -1,0 +1,11 @@
+node_modules
+**/node_modules
+**/dist
+.git
+.env
+.env.*
+*.log
+.runtime
+**/.runtime
+**/*.tsbuildinfo
+test-results
