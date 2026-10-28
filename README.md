@@ -67,6 +67,27 @@ Permissions are enforced in the API, not only in the UI. Users cannot delete or 
 
 Customers, leads, opportunities and activities use `ownerId`; contacts inherit their customer's owner; transactions use `salespersonId`. Sales cannot assign to someone else or link another user's customer/opportunity. **Existing cross-owner relationships are not rewritten**: rows linked to a foreign-owned customer/opportunity are hidden from Sales, even if the primary row is assigned to them, so nested details cannot disclose another person's records. Admins/Managers must align ownership before handing over such records. Deletion remains restricted to Admin/Manager; products remain a shared catalogue.
 
+## Guest access
+
+The login page includes **Login as a guest**. No email or password is required:
+`POST /auth/guest` issues a signed, two-hour guest session without creating a
+database user. Guests can browse company-wide business records, dashboard,
+search, details, Excel exports, and the read-only Copilot (including its
+company-wide analytics/search tools). Team administration remains Admin-only;
+password hashes, credentials and tokens are never returned as CRM data.
+
+Guest sessions are read-only at the API boundary, not just in the UI.
+All authenticated write methods are rejected with HTTP 403, including Lead
+conversion, stock-affecting sales writes and user management. The only allowed
+authenticated POST is the existing read-only `/copilot/chat` endpoint; Copilot
+has no mutation tools. Guest sign-in is rate-limited per IP and Copilot retains
+its request/concurrency limits. Sign out to return to the normal login page.
+
+**Public demo warning:** anyone who can reach this application can enter as a
+guest and read/export business data, including customer contact details.
+Only use this mode with data approved for public demonstration; do not load
+confidential or real personal data into a publicly accessible demo.
+
 ## Excel reports
 
 Every resource-page export (Customers, Contacts, Leads, Opportunities,

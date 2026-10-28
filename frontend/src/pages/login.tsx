@@ -8,12 +8,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 export function LoginPage() {
-  const { user, login } = useAuth();
+  const { user, login, loginAsGuest } = useAuth();
   const [params] = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [visible, setVisible] = useState(false);
   const [pending, setPending] = useState(false);
+  const [guestPending, setGuestPending] = useState(false);
   const [error, setError] = useState("");
   const [demo, setDemo] = useState<{ demo: boolean; adminEmail?: string }>();
   const [configError, setConfigError] = useState("");
@@ -22,10 +23,19 @@ export function LoginPage() {
   }, []);
   if (user) return <Navigate to={params.get("next") === "copilot" ? "/copilot" : "/"} replace />;
   async function submit(event: FormEvent) {
-    event.preventDefault(); setPending(true); setError("");
+    event.preventDefault();
+    if (pending || guestPending) return;
+    setPending(true); setError("");
     try { await login(email, password); }
     catch (err) { setError(err instanceof Error ? err.message : "Sign-in failed."); }
     finally { setPending(false); }
+  }
+  async function enterAsGuest() {
+    if (pending || guestPending) return;
+    setGuestPending(true); setError("");
+    try { await loginAsGuest(); }
+    catch (err) { setError(err instanceof Error ? err.message : "Guest sign-in failed."); }
+    finally { setGuestPending(false); }
   }
   return <div className="grid min-h-screen lg:grid-cols-[1.05fr_1fr]">
     <aside className="relative hidden flex-col justify-between overflow-hidden bg-[#101b33] p-12 text-white lg:flex xl:p-16">
@@ -55,8 +65,12 @@ export function LoginPage() {
           <div className="space-y-2"><Label htmlFor="email">Work email</Label><Input id="email" type="email" autoComplete="username" required value={email} onChange={e => setEmail(e.target.value)} placeholder="you@company.com" className="h-11" /></div>
           <div className="space-y-2"><Label htmlFor="password">Password</Label><div className="relative"><Input id="password" type={visible ? "text" : "password"} autoComplete="current-password" required value={password} onChange={e => setPassword(e.target.value)} placeholder="Enter your password" className="h-11 pr-11" /><button type="button" aria-label={visible ? "Hide password" : "Show password"} onClick={() => setVisible(!visible)} className="absolute right-3 top-3 text-slate-400">{visible ? <EyeOff className="size-5" /> : <Eye className="size-5" />}</button></div></div>
           {(error || configError) && <p role="alert" className="rounded-md bg-red-50 p-3 text-sm text-red-600">{error || configError}</p>}
-          <Button type="submit" className="h-11 w-full" disabled={pending}>{pending ? <Loader2 className="animate-spin" /> : <>Sign in to your workspace<ArrowRight /></>}</Button>
+          <Button type="submit" className="h-11 w-full" disabled={pending || guestPending}>{pending ? <Loader2 className="animate-spin" /> : <>Sign in to your workspace<ArrowRight /></>}</Button>
         </form>
+        <div className="mt-5 border-t pt-5">
+          <Button type="button" variant="outline" className="h-11 w-full" disabled={pending || guestPending} onClick={() => void enterAsGuest()}>{guestPending ? <Loader2 className="animate-spin" /> : <Eye />}Login as a guest</Button>
+          <p className="mt-2 text-center text-xs leading-5 text-slate-500">Explore all CRM business data and Copilot. Read-only access: no adding, editing, deleting, or converting records.</p>
+        </div>
         <p className="mt-5 text-center text-xs text-slate-400">Need access? Contact your workspace administrator.</p>
         {demo?.demo && <div className="mt-10 rounded-lg border border-blue-100 bg-blue-50/50 p-4">
           <p className="text-xs font-semibold text-slate-700">Explore the demo workspace</p><p className="mt-1 text-xs leading-5 text-slate-500">Choose a role to fill in the default demo credentials.</p>

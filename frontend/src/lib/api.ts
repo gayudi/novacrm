@@ -33,7 +33,7 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   return body as T;
 }
 
-export type User = { id: string; name: string; email: string; role: "ADMIN" | "MANAGER" | "SALES" };
+export type User = { id: string; name: string; email: string; role: "ADMIN" | "MANAGER" | "SALES" | "GUEST" };
 export type EntityRecord = { id: string; [key: string]: unknown };
 export type PageResult = { data: EntityRecord[]; total: number; page: number; pageSize: number; totalPages: number };
 export type Lookup = { id: string; name: string; price?: string; stock?: number; active?: boolean; customerId?: string };

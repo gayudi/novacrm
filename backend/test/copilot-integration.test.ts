@@ -71,6 +71,40 @@ after(async () => {
   await db.$disconnect();
 });
 
+test("guest sees company-wide business records and Copilot tools without changing data", async () => {
+  const { body: { token, user } } = await request(app).post("/auth/guest").send({}).expect(200);
+  const guest: Principal = user;
+  for (const resource of ["customers", "contacts", "leads", "opportunities", "activities", "products", "transactions"]) {
+    const response = await request(app).get(`/${resource}?search=${prefix}`).auth(token, { type: "bearer" }).expect(200);
+    if (resource !== "products") assert.ok(response.body.total >= 2, resource);
+    if (resource !== "products") {
+      for (const id of ids[resource]!.slice(0, 2)) {
+        await request(app).get(`/${resource}/${id}`).auth(token, { type: "bearer" }).expect(200);
+      }
+    }
+  }
+  const dashboard = await request(app).get("/dashboard").auth(token, { type: "bearer" }).expect(200);
+  assert.equal(dashboard.body.scope, "company");
+  assert.ok(dashboard.body.totalCustomers >= 2);
+  const lookup = await request(app).get("/lookups").auth(token, { type: "bearer" }).expect(200);
+  assert.ok(lookup.body.users.every((row: Record<string, unknown>) => !("passwordHash" in row)));
+  const sources: Parameters<typeof executeCopilotTool>[3] = [];
+  const aggregate = JSON.parse(await executeCopilotTool("crm_analyze", JSON.stringify({
+    area: "sales", metric: "revenue", groupBy: "none", period: "all_time", branch: null, status: "COMPLETED", limit: 10,
+  }), guest, sources, now));
+  assert.ok(aggregate.result.revenueIDR >= 112000000);
+  const records = await request(app).get(`/copilot/records?entity=customers&search=${prefix}`).auth(token, { type: "bearer" }).expect(200);
+  assert.equal(records.body.records.length, 2);
+  const before = await db.customer.findUniqueOrThrow({ where: { id: ids.customers![0] } });
+  const answer = await request(app).post("/copilot/chat").auth(token, { type: "bearer" })
+    .send({ action: "customer_summary", recordId: ids.customers![0], prompt: "Ringkas customer ini" }).expect(200);
+  assert.equal(answer.body.scope, "company");
+  await request(app).put(`/customers/${before.id}`).auth(token, { type: "bearer" }).send({ name: "Changed by guest" }).expect(403);
+  assert.deepEqual(await db.customer.findUniqueOrThrow({ where: { id: before.id } }), before);
+  const unsupported = JSON.parse(await executeCopilotTool("crm_delete", "{}", guest, sources));
+  assert.equal(unsupported.error, "Unknown CRM tool.");
+});
+
 test("CRM tools aggregate and search only authorized records, emit valid refs, and reject unsupported filters", async () => {
   const sales = users[0]!;
   const sources: { ref: string; resource: "customers" | "contacts" | "leads" | "opportunities" | "activities" | "transactions" | "products"; id: string; label: string }[] = [];

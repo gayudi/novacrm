@@ -1,4 +1,6 @@
 import { Router } from "express";
+import { randomUUID } from "node:crypto";
+import { z } from "zod";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { rateLimit } from "express-rate-limit";
@@ -22,6 +24,11 @@ export const authenticate = asyncRoute(async (req, _res, next) => {
   } catch {
     throw new HttpError(401, "Your session has expired. Please sign in again.");
   }
+  if (payload.sessionType === "guest" && payload.sub?.startsWith("guest:")) {
+    req.user = { id: payload.sub, name: "Guest", email: "", role: "GUEST" };
+    next();
+    return;
+  }
   const user = await db.user.findUnique({ where: { id: payload.sub }, select: publicUser });
   if (!user?.active || payload.version !== user.updatedAt.toISOString()) {
     throw new HttpError(401, "Your account or session has changed. Please sign in again.");
@@ -34,6 +41,17 @@ export const authRouter = Router();
 authRouter.get("/config", (_req, res) => {
   res.json({ demo: config.ENABLE_DEMO_DATA === "true", adminEmail: config.ENABLE_DEMO_DATA === "true" ? config.ADMIN_EMAIL : undefined });
 });
+authRouter.post("/guest", rateLimit({
+  windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: "draft-7", legacyHeaders: false,
+  message: { message: "Too many guest sign-in attempts. Please try again in 15 minutes." },
+}), asyncRoute(async (req, res) => {
+  z.object({}).strict().parse(req.body ?? {});
+  const user = { id: `guest:${randomUUID()}`, name: "Guest", email: "", role: "GUEST" as const };
+  const token = jwt.sign({ sessionType: "guest" }, config.jwtSecret, {
+    ...jwtOptions, subject: user.id, algorithm: "HS256", expiresIn: "2h",
+  });
+  res.json({ token, user });
+}));
 authRouter.post("/login", rateLimit({
   windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: "draft-7", legacyHeaders: false,
   message: { message: "Too many sign-in attempts. Please try again in 15 minutes." },

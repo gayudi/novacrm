@@ -158,7 +158,7 @@ function CopilotWorkspace({ user }: { user: User | null }) {
         <header className="flex shrink-0 items-center gap-3 border-b px-5 py-4">
           <Button asChild size="icon" variant="ghost"><Link to="/" aria-label="Kembali ke CRM" title="Kembali ke CRM"><ArrowLeft /></Link></Button>
           <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-cyan-100 via-indigo-100 to-fuchsia-100 text-indigo-600"><Sparkles className="size-5" /></span>
-          <div className="min-w-0 flex-1"><h1 className="text-sm font-semibold text-slate-800">Nova Copilot</h1><p className="mt-0.5 truncate text-[10px] text-slate-500">{user ? `${user.name} / ${{ ADMIN: "Administrator", MANAGER: "Manajer", SALES: "Staf penjualan" }[user.role]}` : "Asisten AI untuk bisnis ritel Anda"}</p></div>
+          <div className="min-w-0 flex-1"><h1 className="text-sm font-semibold text-slate-800">Nova Copilot</h1><p className="mt-0.5 truncate text-[10px] text-slate-500">{user ? `${user.name} / ${{ ADMIN: "Administrator", MANAGER: "Manajer", SALES: "Staf penjualan", GUEST: "Tamu - hanya baca" }[user.role]}` : "Asisten AI untuk bisnis ritel Anda"}</p></div>
           <Button size="icon" variant="ghost" aria-label="Percakapan baru" title="Percakapan baru" onClick={reset}><Plus /></Button>
           {user && <Button size="icon" variant="ghost" aria-label="Keluar dari Copilot" title="Keluar dari tab ini" onClick={logout}><LogOut /></Button>}
         </header>

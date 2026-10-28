@@ -2,7 +2,7 @@ import { Prisma, Role } from "@prisma/client";
 import type { ErrorRequestHandler, Request, RequestHandler } from "express";
 import { ZodError, z } from "zod";
 
-export type Principal = { id: string; name: string; email: string; role: Role };
+export type Principal = { id: string; name: string; email: string; role: Role | "GUEST" };
 
 declare global {
   namespace Express {
@@ -24,7 +24,16 @@ export function principal(req: Request): Principal {
 }
 
 export const allow = (...roles: Role[]): RequestHandler => (req, _res, next) => {
-  if (!roles.includes(principal(req).role)) return next(new HttpError(403, "Your role does not allow this action."));
+  if (!roles.some(role => role === principal(req).role)) return next(new HttpError(403, "Your role does not allow this action."));
+  next();
+};
+
+export const enforceGuestReadOnly: RequestHandler = (req, _res, next) => {
+  const isRead = req.method === "GET" || req.method === "HEAD";
+  const isCopilotChat = req.method === "POST" && req.path === "/copilot/chat";
+  if (principal(req).role === "GUEST" && !isRead && !isCopilotChat) {
+    return next(new HttpError(403, "Guest access is read-only. You cannot create, edit, delete, or convert CRM records."));
+  }
   next();
 };
 

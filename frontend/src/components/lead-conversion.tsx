@@ -10,10 +10,13 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "./ui/dialog";
 import { ErrorState, Loading } from "./feedback";
+import { useAuth } from "@/auth";
 
 export function LeadConversionAction({ lead, onConvert }: { lead: EntityRecord; onConvert: (lead: EntityRecord) => void }) {
+  const { user } = useAuth();
   const opportunityId = getValue(lead, "convertedOpportunity.id");
   if (typeof opportunityId === "string") return <Button asChild variant="outline" size="sm"><Link to={`/opportunities?record=${encodeURIComponent(opportunityId)}`}><ArrowUpRight />Lihat opportunity</Link></Button>;
+  if (user?.role === "GUEST") return null;
   if (lead.convertedAt) return null;
   if (lead.status !== "QUALIFIED" && lead.status !== "CONVERTED") return null;
   return <Button variant="outline" size="sm" onClick={() => onConvert(lead)} aria-label={`Konversi ${String(lead.name)}`}><ArrowUpRight />{lead.status === "CONVERTED" ? "Konversi lead lama" : "Convert to Opportunity"}</Button>;

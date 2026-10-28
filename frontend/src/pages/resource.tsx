@@ -76,8 +76,8 @@ export function ResourcePage({ resource }: { resource: Resource }) {
   const [pendingDelete, setPendingDelete] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
-  const canWrite = user?.role !== "SALES" || !resource.restrictedWrite;
-  const canDelete = user?.role !== "SALES";
+  const canWrite = Boolean(user) && user?.role !== "GUEST" && (user?.role !== "SALES" || !resource.restrictedWrite);
+  const canDelete = user?.role === "ADMIN" || user?.role === "MANAGER";
   const isTransactions = resource.key === "transactions";
   const hasFilters = Boolean(query || status || (isTransactions && (branch || salespersonId || period !== "all")));
   const linkedRecord = params.get("record");

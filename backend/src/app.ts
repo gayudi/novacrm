@@ -3,7 +3,7 @@ import helmet from "helmet";
 import { rateLimit } from "express-rate-limit";
 import { db } from "./db.js";
 import { authenticate, authRouter } from "./auth.js";
-import { asyncRoute, errorHandler } from "./http.js";
+import { asyncRoute, enforceGuestReadOnly, errorHandler } from "./http.js";
 import { resources } from "./resources.js";
 import { transactionsRouter } from "./transactions.js";
 import { usersRouter } from "./users.js";
@@ -24,6 +24,7 @@ export function createApp(options: { copilotComplete?: Completion } = {}) {
   app.use(rateLimit({ windowMs: 60_000, limit: 500, standardHeaders: "draft-7", legacyHeaders: false, message: { message: "Too many requests. Please try again shortly." } }));
   app.use("/auth", authRouter);
   app.use(authenticate);
+  app.use(enforceGuestReadOnly);
   app.use("/dashboard", dashboardRouter);
   app.use(resources);
   app.use("/transactions", transactionsRouter);

@@ -4,7 +4,7 @@ import { api, ApiError, session, type User } from "@/lib/api";
 import { ErrorState, Loading } from "@/components/feedback";
 import { useMatch } from "react-router-dom";
 
-type AuthContextValue = { user: User | null; login: (email: string, password: string) => Promise<void>; logout: () => void };
+type AuthContextValue = { user: User | null; login: (email: string, password: string) => Promise<void>; loginAsGuest: () => Promise<void>; logout: () => void };
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -31,9 +31,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     session.set(response.token); setUser(response.user);
   }
   function logout() { session.clear(); setUser(null); }
+  async function loginAsGuest() {
+    const response = await api<{ token: string; user: User }>("/auth/guest", { method: "POST", body: "{}" });
+    session.set(response.token); setUser(response.user);
+  }
   if (loading) return <div className="grid min-h-screen place-items-center"><Loading label={isCopilot ? "Memuat ruang kerja Anda..." : undefined} /></div>;
   if (error) return <div className="mx-auto mt-24 max-w-lg"><ErrorState error={isCopilot ? "Sesi tidak dapat dipulihkan. Periksa koneksi ke server lalu coba lagi." : error} retry={() => void restore()} retryLabel={isCopilot ? "Coba lagi" : undefined} /></div>;
-  return <AuthContext.Provider value={{ user, login, logout }}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={{ user, login, loginAsGuest, logout }}>{children}</AuthContext.Provider>;
 }
 export function useAuth() {
   const context = useContext(AuthContext);
