@@ -17,7 +17,7 @@ export type CopilotVisual = VisualRequest & {
   points: { label: string; value: number }[];
 };
 
-const visualIntent = /\b(grafik|diagram|bagan|chart|graph|flowchart|visualisasi)\b/i;
+const visualIntent = /\b(grafik|diagram|bagan|chart|graph|flowchart|visualisasi|visualisasikan|plot(?:kan)?)\b/i;
 export function resolveVisualRequest(input: { action: string; prompt: string; recordId?: string; visualization?: VisualRequest }): VisualRequest | undefined {
   const prompt = input.prompt;
   if (!visualIntent.test(prompt) && input.action !== "visualization") return undefined;
@@ -38,7 +38,7 @@ export function resolveVisualRequest(input: { action: string; prompt: string; re
   } else if (/\b(produk|products?)\b/i.test(prompt)) metric = "top_products";
   else if (/\b(cabang|branches|branch)\b/i.test(prompt)) metric = "sales_branch";
   else if (/\b(pipeline|peluang|opportunit(?:y|ies))\b/i.test(prompt)) metric = "pipeline_stages";
-  else if (/\b(pendapatan|penjualan|revenue|sales|omzet)\b/i.test(prompt)) metric = "revenue_monthly";
+  else if (/\b(pendapatan|penjualan|revenue|sales|omzet|transaksi)\b/i.test(prompt)) metric = "revenue_monthly";
   if (!metric) throw new HttpError(400, "Pilih topik grafik: tren pendapatan atau lead, sumber/status lead, penjualan per cabang, produk terlaris, atau tahapan peluang. Contoh: buat grafik garis pendapatan.");
   const type = /\b(lingkaran|pie|donat|donut)\b/i.test(prompt) ? "pie"
     : /\b(garis|line)\b/i.test(prompt) ? "line"

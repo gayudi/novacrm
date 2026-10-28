@@ -22,13 +22,13 @@ export const contactSchema = z.object({ name, email: optionalEmail, phone, title
 export const leadSchema = z.object({
   name, email: optionalEmail, phone, source: z.nativeEnum(LeadSource),
   status: z.nativeEnum(LeadStatus), interest: optionalText, notes: optionalText,
-  branch,
+  branch, productId: id.nullable().optional(),
   customerId: id.nullable().optional(), ownerId: id,
 }).strict();
 export const opportunitySchema = z.object({
   name, stage: z.nativeEnum(OpportunityStage), value: money,
   probability: z.number().int().min(0).max(100), expectedCloseDate: date,
-  branch, lostReason: optionalText, notes: optionalText, customerId: id, ownerId: id,
+  branch, productId: id.nullable().optional(), lostReason: optionalText, notes: optionalText, customerId: id, ownerId: id,
 }).strict();
 export const leadConversionSchema = z.object({
   expectedUpdatedAt: date,

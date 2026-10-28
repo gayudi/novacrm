@@ -145,6 +145,8 @@ model Lead {
   branch     Branch?
   status     LeadStatus @default(NEW)
   interest   String?
+  productId  String?
+  product    Product?   @relation(fields: [productId], references: [id], onDelete: SetNull)
   notes      String?
   customerId String?
   customer   Customer?  @relation(fields: [customerId], references: [id], onDelete: SetNull)
@@ -157,6 +159,7 @@ model Lead {
   updatedAt  DateTime   @updatedAt
   @@index([ownerId])
   @@index([status, source])
+  @@index([productId])
   @@map("leads")
 }
 
@@ -166,6 +169,8 @@ model Opportunity {
   stage             OpportunityStage @default(QUALIFICATION)
   branch            Branch?
   lostReason        String?
+  productId         String?
+  product           Product?         @relation(fields: [productId], references: [id], onDelete: SetNull)
   value             Decimal          @db.Decimal(18, 2)
   probability       Int              @default(20)
   expectedCloseDate  DateTime
@@ -182,6 +187,7 @@ model Opportunity {
   @@index([stage])
   @@index([ownerId])
   @@index([customerId])
+  @@index([productId])
   @@map("opportunities")
 }
 
@@ -219,6 +225,8 @@ model Product {
   stock       Int                   @default(0)
   active      Boolean               @default(true)
   items       SalesTransactionItem[]
+  leads       Lead[]
+  opportunities Opportunity[]
   createdAt   DateTime              @default(now())
   updatedAt   DateTime              @updatedAt
   @@index([brand])

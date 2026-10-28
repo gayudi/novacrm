@@ -10,6 +10,7 @@ import { DialogContent, DialogDescription, DialogTitle } from "./ui/dialog";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { ErrorState, Loading } from "./feedback";
+import { ProductSelect } from "./product-select";
 
 type Values = Record<string, string | number | boolean>;
 type Item = { productId: string; quantity: number };
@@ -38,7 +39,7 @@ export function EntityForm({ resource, record, onClose, onSaved }: { resource: R
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const [fields, setFields] = useState<Record<string, string[]>>({});
-  const needsLookups = resource.key === "transactions" || resource.fields.some(field => field.type === "reference");
+  const needsLookups = resource.key === "transactions" || resource.fields.some(field => field.lookup);
   useEffect(() => {
     if (!needsLookups) return;
     let active = true;
@@ -56,6 +57,7 @@ export function EntityForm({ resource, record, onClose, onSaved }: { resource: R
       const payload: Record<string, unknown> = {};
       for (const field of resource.fields) {
         const value = values[field.key];
+        if (field.type === "product" && !value && !record?.productId && record?.interest) continue;
         if (field.type === "password" && record && !value) continue;
         if (field.type === "datetime-local") payload[field.key] = new Date(String(value)).toISOString();
         else if (field.type === "number") payload[field.key] = Number(value);
@@ -83,7 +85,11 @@ export function EntityForm({ resource, record, onClose, onSaved }: { resource: R
         return <div key={field.key} className={field.wide ? "sm:col-span-2" : ""}>
           <Label htmlFor={`field-${field.key}`}>{field.label}{required && <span className="ml-1 text-primary">*</span>}{field.type === "password" && record && <span className="ml-1 font-normal text-slate-400">(leave blank to keep)</span>}</Label>
           <div className="mt-1.5">
-            {field.type === "textarea" ? <textarea id={`field-${field.key}`} className="field min-h-20" maxLength={2000} value={String(value ?? "")} onChange={e => set(field.key, e.target.value)} placeholder={field.placeholder} /> :
+            {field.type === "product" ? <>
+              <ProductSelect id={`field-${field.key}`} value={String(value ?? "")} products={lookups?.products ?? []} disabled={pending}
+                onChange={productId => set(field.key, productId)} />
+              {!record?.productId && Boolean(record?.interest) && <p className="mt-1 text-[10px] text-slate-500">Previous interest: {String(record?.interest)}. Select a catalog product to replace it; otherwise it is preserved.</p>}
+            </> : field.type === "textarea" ? <textarea id={`field-${field.key}`} className="field min-h-20" maxLength={2000} value={String(value ?? "")} onChange={e => set(field.key, e.target.value)} placeholder={field.placeholder} /> :
               field.type === "checkbox" ? <label className="flex h-10 items-center gap-2 text-xs text-slate-500"><input id={`field-${field.key}`} type="checkbox" className="size-4 accent-blue-600" checked={Boolean(value)} onChange={e => set(field.key, e.target.checked)} />{Boolean(value) ? "Enabled" : "Disabled"}</label> :
               field.type === "select" || field.type === "reference" ? <select id={`field-${field.key}`} className="field" required={required} disabled={conversionLocked} value={String(value ?? "")} onChange={e => set(field.key, e.target.value)}>
                 {field.type === "reference" && <option value="">{required ? "Select an option" : "None"}</option>}

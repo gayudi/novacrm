@@ -10,6 +10,7 @@ import { HttpError, type Principal } from "../src/http.js";
 import type { VisualRequest } from "../src/copilot-visual.js";
 import { transactionPeriod } from "../src/transactions.js";
 import { retrieveSalesRanking, salesRankingAnswer, salesRankingRequest } from "../src/copilot-sales.js";
+import { executeCopilotTool } from "../src/copilot-tools.js";
 
 if (!process.env.DATABASE_URL || !new URL(process.env.DATABASE_URL).pathname.endsWith("_test") || process.env.ALLOW_INTEGRATION_TESTS !== "true") {
   throw new Error("Copilot integration tests require a dedicated database ending in _test and ALLOW_INTEGRATION_TESTS=true.");
@@ -68,6 +69,31 @@ after(async () => {
   await db.product.deleteMany({ where: { sku: prefix } });
   await db.user.deleteMany({ where: { id: { in: owners } } });
   await db.$disconnect();
+});
+
+test("CRM tools aggregate and search only authorized records, emit valid refs, and reject unsupported filters", async () => {
+  const sales = users[0]!;
+  const sources: { ref: string; resource: "customers" | "contacts" | "leads" | "opportunities" | "activities" | "transactions" | "products"; id: string; label: string }[] = [];
+  const aggregate = JSON.parse(await executeCopilotTool("crm_analyze", JSON.stringify({
+    area: "sales", metric: "revenue", groupBy: "none", period: "all_time", branch: null, status: "COMPLETED", limit: 10,
+  }), sales, sources, now));
+  assert.equal(aggregate.result.revenueIDR, 3000000);
+  assert.equal(aggregate.result.transactions, 1);
+
+  const search = JSON.parse(await executeCopilotTool("crm_search", JSON.stringify({
+    entity: "customers", query: prefix, period: "all_time", branch: null, status: null, limit: 10,
+  }), sales, sources, now));
+  assert.deepEqual(search.records.map((record: { name: string }) => record.name), [`${prefix} Customer 0`]);
+  assert.deepEqual(search.sourceRefs, ["S1"]);
+  assert.deepEqual(sources.map(source => source.id), [ids.customers![0]]);
+  assert.equal(JSON.stringify(search).includes("PRIVATE_ADDRESS"), false);
+  assert.equal(JSON.stringify(search).includes("PRIVATE_CUSTOMER_NOTES"), false);
+  assert.equal(JSON.stringify(search).includes("+628"), false);
+
+  const unsupported = JSON.parse(await executeCopilotTool("crm_search", JSON.stringify({
+    entity: "products", query: prefix, period: "all_time", branch: "JAKARTA", status: null, limit: 5,
+  }), sales, sources, now));
+  assert.match(unsupported.error, /Filter cabang belum tersedia/);
 });
 
 test("Sales lists, search, counts, detail reads and lookups exclude foreign and cross-linked records", async () => {
@@ -215,13 +241,19 @@ test("all Copilot actions query PostgreSQL first and send bounded facts without 
       assert.doesNotMatch(response.body.answer, new RegExp(users[1]!.name));
       continue;
     }
+    if (action === "visualization") {
+      assert.equal(response.body.answerSource, "visualization");
+      assert.equal(response.body.scope, "own");
+      assert.deepEqual(response.body.visualization.points, [{ label: "Situs web", value: 1 }]);
+      continue;
+    }
     assert.equal(response.body.answer, "Synthetic test reply.");
     assert.ok(response.body.sources.length <= 10);
     const allowed = new Set(Object.values(ids).map(rows => rows[0]));
     assert.ok(response.body.sources.every((row: { id: string }) => allowed.has(row.id)));
     assert.equal(response.body.contextBytes, Buffer.byteLength(seen.at(-1)!));
   }
-  assert.equal(seen.length, actions.length - 1);
+  assert.equal(seen.length, actions.length - 2);
   assert.equal(JSON.parse(seen[3]!).facts.topPurchasedProducts[0].revenueIDR, 3000000);
   const forecast = JSON.parse(seen[5]!);
   assert.equal(forecast.facts.next30Days.weightedPipelineIDR, 6000000);
@@ -637,23 +669,26 @@ test("chart aggregates and flow counts are exact, scoped, bounded, and shared un
       assert.equal(result.visualization.points.length, 7);
     }
   }
-  let captured: unknown;
-  const chartApp = createApp({ copilotComplete: async context => {
-    captured = JSON.parse(context).facts.visualization;
-    return { answer: "Grafik menggunakan data sesuai hak akses.", truncated: false };
+  const chartApp = createApp({ copilotComplete: async () => {
+    throw new Error("Visualizations must not depend on a model-generated answer.");
   } });
   for (const type of ["bar", "line", "pie"] as const) {
     const response = (await request(chartApp).post("/copilot/chat").set(auth())
       .send({ action: "visualization", prompt: "Buat visualisasi", visualization: { type, metric: "lead_sources" } }).expect(200)).body;
-    assert.deepEqual(response.visualization, captured);
     assert.equal(response.visualization.type, type);
     assert.deepEqual(response.visualization.points, [{ label: "Situs web", value: 1 }]);
+    assert.equal(response.answerSource, "visualization");
+    assert.match(response.answer, /Grafik .* sudah dibuat dari data CRM/);
+    assert.match(response.answer, /Nilai tertinggi.*Situs web/);
   }
   const natural = (await request(chartApp).post("/copilot/chat").set(auth())
-    .send({ action: "executive_summary", prompt: "Buat diagram lingkaran sumber lead" }).expect(200)).body;
+    .send({ action: "executive_summary", prompt: "Buat grafik batang penjualan bulanan" }).expect(200)).body;
   assert.equal(natural.action, "visualization");
-  assert.equal(natural.visualization.type, "pie");
-  assert.deepEqual(natural.visualization, captured);
+  assert.equal(natural.visualization.type, "bar");
+  assert.equal(natural.visualization.metric, "revenue_monthly");
+  assert.equal(natural.visualization.points.length, 3);
+  assert.equal(natural.answerSource, "visualization");
+  assert.match(natural.answer, /Grafik batang .* sudah dibuat dari data CRM/);
   let invoked = false;
   const rejectedApp = createApp({ copilotComplete: async () => { invoked = true; return { answer: "Unexpected", truncated: false }; } });
   for (const body of [

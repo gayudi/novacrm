@@ -30,6 +30,7 @@ after(async () => {
   await db.lead.deleteMany({ where: { ownerId: { in: owners } } });
   await db.opportunity.deleteMany({ where: { ownerId: { in: owners } } });
   await db.customer.deleteMany({ where: { ownerId: { in: owners } } });
+  await db.product.deleteMany({ where: { sku: prefix } });
   await db.user.deleteMany({ where: { id: { in: owners } } });
   await db.$disconnect();
 });
@@ -52,7 +53,8 @@ const leadInput = (row: Lead) => ({
 const counts = async () => [await db.customer.count(), await db.opportunity.count()];
 
 test("Qualified conversion creates a customer and opportunity atomically, preserves source and links both ways", async () => {
-  const row = await lead();
+  const product = await db.product.create({ data: { name: "Catalog smartphone", sku: prefix, brand: "Test", price: 15000000 } });
+  const row = await db.lead.update({ where: { id: (await lead()).id }, data: { productId: product.id, interest: product.name } });
   const before = await counts();
   const response = await convert(row).expect(201);
   const saved = await db.lead.findUniqueOrThrow({ where: { id: row.id } });
@@ -66,6 +68,7 @@ test("Qualified conversion creates a customer and opportunity atomically, preser
   assert.deepEqual(saved.createdAt, row.createdAt);
   assert.equal(saved.source, row.source);
   assert.equal(opportunity.stage, "QUALIFIED");
+  assert.equal(opportunity.productId, product.id);
   assert.equal(opportunity.value.toNumber(), 15000000);
   assert.equal(opportunity.probability, 45);
   assert.equal(opportunity.expectedCloseDate.toISOString(), "2026-12-15T03:00:00.000Z");

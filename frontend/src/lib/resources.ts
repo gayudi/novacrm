@@ -1,7 +1,7 @@
 import type { Lookups } from "./api";
 
 export type Field = {
-  key: string; label: string; type?: "text" | "email" | "tel" | "number" | "textarea" | "select" | "reference" | "datetime-local" | "checkbox" | "password";
+  key: string; label: string; type?: "text" | "email" | "tel" | "number" | "textarea" | "select" | "reference" | "product" | "datetime-local" | "checkbox" | "password";
   required?: boolean; options?: string[]; lookup?: keyof Lookups; min?: number; max?: number; step?: number;
   defaultValue?: string | number | boolean; wide?: boolean; placeholder?: string;
 };
@@ -12,6 +12,7 @@ export type Resource = {
 };
 const owner: Field = { key: "ownerId", label: "Assigned to", type: "reference", lookup: "users", required: true };
 const customer: Field = { key: "customerId", label: "Customer", type: "reference", lookup: "customers", required: true };
+const product: Field = { key: "productId", label: "Product interest", type: "product", lookup: "products" };
 const notes: Field = { key: "notes", label: "Notes", type: "textarea", wide: true, placeholder: "Add helpful context for your team..." };
 const name: Field = { key: "name", label: "Full name", required: true };
 const email: Field = { key: "email", label: "Email address", type: "email" };
@@ -40,13 +41,13 @@ export const resources: Resource[] = [
     key: "leads", title: "Leads", singular: "lead", primary: "name", secondary: "email", statuses: leadStatuses,
     description: "Newest leads first, by creation time. Dates and times are shown in WIB.",
     columns: [{ key: "interest", label: "Product interest" }, { key: "source", label: "Source", format: "badge" }, { key: "status", label: "Status", format: "badge" }, branchColumn, { key: "owner.name", label: "Assigned to" }, { key: "createdAt", label: "Created", format: "datetime" }, { key: "updatedAt", label: "Last updated", format: "datetime" }],
-    fields: [name, email, phone, { key: "interest", label: "Product interest", placeholder: "e.g. Apple iPhone 16" }, { key: "source", label: "Lead source", type: "select", options: ["WALK_IN", "WEBSITE", "INSTAGRAM", "FACEBOOK", "REFERRAL", "MARKETPLACE", "TIKTOK", "SOCIAL_MEDIA", "EVENT"], required: true }, { key: "status", label: "Status", type: "select", options: leadStatuses, required: true }, owner, branch, { ...customer, required: false }, notes],
+    fields: [name, email, phone, product, { key: "source", label: "Lead source", type: "select", options: ["WALK_IN", "WEBSITE", "INSTAGRAM", "FACEBOOK", "REFERRAL", "MARKETPLACE", "TIKTOK", "SOCIAL_MEDIA", "EVENT"], required: true }, { key: "status", label: "Status", type: "select", options: leadStatuses, required: true }, owner, branch, { ...customer, required: false }, notes],
   },
   {
     key: "opportunities", title: "Opportunities", singular: "opportunity", primary: "name", secondary: "customer.name", statuses: stages,
     description: "A clear view of every deal. A confident next step for your team.",
-    columns: [{ key: "value", label: "Deal value", format: "money" }, { key: "stage", label: "Stage", format: "badge" }, branchColumn, { key: "probability", label: "Probability", format: "percent" }, { key: "expectedCloseDate", label: "Expected close", format: "date" }],
-    fields: [{ key: "name", label: "Opportunity name", required: true, wide: true }, customer, owner, branch, { key: "value", label: "Deal value (IDR)", type: "number", min: 0, max: 1e12, step: 0.01, required: true }, { key: "stage", label: "Stage", type: "select", options: stages, required: true }, { key: "probability", label: "Win probability (%)", type: "number", min: 0, max: 100, defaultValue: 20, required: true }, { key: "expectedCloseDate", label: "Expected close", type: "datetime-local", required: true }, { key: "lostReason", label: "Lost reason", placeholder: "For lost deals: price, financing, stock, timing..." }, notes],
+    columns: [{ key: "value", label: "Deal value", format: "money" }, { key: "stage", label: "Stage", format: "badge" }, branchColumn, { key: "owner.name", label: "Salesperson" }, { key: "probability", label: "Probability", format: "percent" }, { key: "expectedCloseDate", label: "Expected close", format: "date" }],
+    fields: [{ key: "name", label: "Opportunity name", required: true, wide: true }, customer, product, owner, branch, { key: "value", label: "Deal value (IDR)", type: "number", min: 0, max: 1e12, step: 0.01, required: true }, { key: "stage", label: "Stage", type: "select", options: stages, required: true }, { key: "probability", label: "Win probability (%)", type: "number", min: 0, max: 100, defaultValue: 20, required: true }, { key: "expectedCloseDate", label: "Expected close", type: "datetime-local", required: true }, { key: "lostReason", label: "Lost reason", placeholder: "For lost deals: price, financing, stock, timing..." }, notes],
   },
   {
     key: "activities", title: "Activities", singular: "activity", primary: "subject", secondary: "customer.name", statuses: activityStatuses,

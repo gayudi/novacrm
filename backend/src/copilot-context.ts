@@ -28,7 +28,7 @@ export function resolveCopilotAction(input: ChatInput): ChatInput["action"] {
   const latestLeads = /\b(?:leads?\s+(?:terakhir|terbaru)|(?:latest|last|newest|recent)\s+(?:\d+\s+)?leads?|\d+\s+(?:latest|last|newest|recent)\s+leads?)\b/i;
   return !input.recordId && latestLeads.test(input.prompt) ? "latest_leads" : input.action;
 }
-export type Source = { ref: string; resource: "customers" | "leads" | "opportunities" | "activities" | "transactions"; id: string; label: string; createdAt?: string; updatedAt?: string };
+export type Source = { ref: string; resource: "customers" | "contacts" | "leads" | "opportunities" | "activities" | "transactions" | "products"; id: string; label: string; createdAt?: string; updatedAt?: string };
 export const MAX_CONTEXT_BYTES = 6000;
 const opportunitySelect = { id: true, name: true, stage: true, branch: true, value: true, probability: true, expectedCloseDate: true, updatedAt: true } as const;
 const activitySelect = { id: true, subject: true, type: true, status: true, dueAt: true } as const;

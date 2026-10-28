@@ -1,0 +1,51 @@
+services:
+  db:
+    mem_limit: 384m
+    cpus: 0.50
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+  backend:
+    mem_limit: 512m
+    cpus: 0.75
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+  frontend:
+    mem_limit: 96m
+    cpus: 0.25
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+  gateway:
+    image: caddy:2-alpine
+    environment:
+      NOVA_DOMAIN: ${NOVA_DOMAIN:?Set NOVA_DOMAIN to the public DNS hostname}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - gateway_data:/data
+      - gateway_config:/config
+    depends_on:
+      frontend:
+        condition: service_healthy
+    mem_limit: 128m
+    cpus: 0.25
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  gateway_data:
+  gateway_config:

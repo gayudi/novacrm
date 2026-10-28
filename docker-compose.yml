@@ -53,7 +53,7 @@ services:
       context: .
       dockerfile: frontend/Dockerfile
     ports:
-      - "${APP_PORT:-8080}:8080"
+      - "${APP_BIND_ADDRESS:-0.0.0.0}:${APP_PORT:-8080}:8080"
     depends_on:
       backend:
         condition: service_healthy

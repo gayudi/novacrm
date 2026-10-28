@@ -5,7 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import express from "express";
 import request from "supertest";
-import { azureSettings, createAzureCompletion, MAX_COMPLETION_TOKENS } from "../src/azure.js";
+import { azureSettings, createAzureAgentCompletion, createAzureCompletion, MAX_AGENT_ROUNDS, MAX_AGENT_TOOL_CALLS, MAX_COMPLETION_TOKENS } from "../src/azure.js";
+import { copilotTools } from "../src/copilot-tools.js";
 import { createCopilotRouter } from "../src/copilot.js";
 import { chatSchema, resolveCopilotAction } from "../src/copilot-context.js";
 import { resolveVisualRequest, visualRequestSchema } from "../src/copilot-visual.js";
@@ -15,6 +16,8 @@ import { salesRankingAnswer, salesRankingRequest } from "../src/copilot-sales.js
 const settings = { endpoint: "https://example.openai.azure.com/openai/v1/chat/completions", key: "synthetic-test-key", deployment: "test-chat" };
 const signal = () => new AbortController().signal;
 const reply = (content: string | null = "Test answer", finish_reason = "stop") => new Response(JSON.stringify({ choices: [{ message: { content }, finish_reason }] }));
+const toolReply = (calls: { id: string; name: string; arguments: string }[], content: string | null = null) =>
+  new Response(JSON.stringify({ choices: [{ message: { content, tool_calls: calls.map(call => ({ id: call.id, type: "function", function: { name: call.name, arguments: call.arguments } })) }, finish_reason: "tool_calls" }] }));
 const status = (expected: number) => (error: unknown) => error instanceof HttpError && error.status === expected;
 
 test("the same Copilot router sees local configuration changes without a server restart", async () => {
@@ -99,6 +102,9 @@ test("latest-lead prompts select fixed retrieval without overriding a selected r
 test("visual requests select only supported metrics/types and reject unknown topics or record-level scope", () => {
   const cases = [
     ["Buatkan grafik garis pendapatan", "line", "revenue_monthly"],
+    ["Buat grafik batang penjualan bulanan", "bar", "revenue_monthly"],
+    ["Plot penjualan per bulan", "line", "revenue_monthly"],
+    ["Tolong visualisasikan transaksi bulanan", "line", "revenue_monthly"],
     ["Buat grafik batang penjualan per cabang", "bar", "sales_branch"],
     ["Diagram lingkaran sumber lead", "pie", "lead_sources"],
     ["Diagram lingkaran status lead", "pie", "lead_statuses"],
@@ -225,4 +231,56 @@ test("Azure timeout and user cancellation stop the request", async () => {
   const controller = new AbortController();
   controller.abort();
   await assert.rejects(createAzureCompletion(settings, delayed)("{}", "Question", controller.signal), status(499));
+});
+
+test("strict CRM function definitions produce a grounded tool result before the final answer", async () => {
+  let requests = 0;
+  const toolCall = { id: "call-1", name: "crm_analyze", arguments: '{"area":"sales"}' };
+  const complete = createAzureAgentCompletion(settings, async (_url, options) => {
+    const body = JSON.parse(String(options?.body));
+    assert.equal(body.parallel_tool_calls, false);
+    assert.equal(body.tools.length, 2);
+    for (const tool of body.tools) {
+      assert.equal(tool.type, "function");
+      assert.equal(tool.function.strict, true);
+      const { properties, required, additionalProperties } = tool.function.parameters;
+      assert.equal(additionalProperties, false);
+      assert.deepEqual([...required].sort(), Object.keys(properties).sort());
+    }
+    if (requests++ === 0) return toolReply([toolCall]);
+    assert.deepEqual(body.messages.slice(-2).map((message: { role: string }) => message.role), ["assistant", "tool"]);
+    assert.equal(body.messages.at(-1).tool_call_id, "call-1");
+    assert.equal(body.messages.at(-1).content, '{"result":5}');
+    return reply("Pendapatan bulan ini Rp5.", "stop");
+  });
+  assert.deepEqual(await complete("scoped facts", "Berapa pendapatan?", signal(), async (name, args) => {
+    assert.equal(name, "crm_analyze");
+    assert.equal(args, toolCall.arguments);
+    return '{"result":5}';
+  }), { answer: "Pendapatan bulan ini Rp5.", truncated: false, toolsUsed: 1 });
+  assert.equal(requests, 2);
+  assert.deepEqual(copilotTools.map(tool => tool.function.name), ["crm_analyze", "crm_search"]);
+});
+
+test("CRM agent rejects excessive tool calls, excessive rounds and oversized tool output", async () => {
+  const call = (id: string) => ({ id, name: "crm_search", arguments: "{}" });
+  let requestCount = 0;
+  const tooManyCalls = createAzureAgentCompletion(settings, async () => {
+    requestCount++;
+    return requestCount === 1 ? toolReply(Array.from({ length: MAX_AGENT_TOOL_CALLS }, (_, index) => call(`first-${index}`))) : toolReply([call("overflow")]);
+  });
+  let executions = 0;
+  await assert.rejects(tooManyCalls("", "Question", signal(), async () => { executions++; return "{}"; }), status(502));
+  assert.equal(executions, MAX_AGENT_TOOL_CALLS);
+
+  const tooManyRounds = createAzureAgentCompletion(settings, async (_url, options) => {
+    const body = JSON.parse(String(options?.body));
+    const sequence = body.messages.filter((message: { role: string }) => message.role === "assistant").length + 1;
+    return toolReply([call(`round-${sequence}`)]);
+  });
+  await assert.rejects(tooManyRounds("", "Question", signal(), async () => "{}"), status(502));
+  assert.equal(MAX_AGENT_ROUNDS, 4);
+
+  const oversized = createAzureAgentCompletion(settings, async () => toolReply([call("large")]));
+  await assert.rejects(oversized("", "Question", signal(), async () => "x".repeat(24001)), error => error instanceof HttpError && error.status === 413);
 });

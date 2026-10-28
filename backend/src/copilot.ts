@@ -5,13 +5,32 @@ import { db } from "./db.js";
 import { customerScope, leadScope, opportunityScope } from "./access.js";
 import { asyncRoute, HttpError, principal } from "./http.js";
 import { actions, chatSchema, retrieveContext } from "./copilot-context.js";
-import { azureSettings, createAzureCompletion, type Completion } from "./azure.js";
+import { azureSettings, createAzureAgentCompletion, createAzureCompletion, type Completion, type CompletionResult } from "./azure.js";
 import { salesRankingAnswer } from "./copilot-sales.js";
+import { executeCopilotTool } from "./copilot-tools.js";
+import type { CopilotVisual } from "./copilot-visual.js";
+
+function visualizationAnswer(visual: CopilotVisual): CompletionResult {
+  const type = visual.type === "bar" ? "batang" : visual.type === "line" ? "garis" : visual.type === "pie" ? "lingkaran" : "alur";
+  const highest = visual.points.reduce<(typeof visual.points)[number] | undefined>((current, point) =>
+    !current || point.value > current.value ? point : current, undefined);
+  const value = (amount: number) => visual.unit === "IDR"
+    ? `Rp${new Intl.NumberFormat("id-ID").format(amount)}`
+    : `${new Intl.NumberFormat("id-ID").format(amount)} ${visual.unit}`;
+  const highlight = highest && highest.value > 0
+    ? `Nilai tertinggi pada grafik adalah **${highest.label}** (${value(highest.value)}).`
+    : "Belum ada nilai tercatat untuk ditonjolkan pada grafik.";
+  return {
+    answer: `Grafik ${type} **${visual.title}** sudah dibuat dari data CRM.\n\n${highlight}\n\n${visual.description}`,
+    truncated: false,
+  };
+}
 
 export function createCopilotRouter(complete?: Completion) {
   const router = Router();
   const completion: Completion = complete ?? ((context, prompt, signal) =>
     createAzureCompletion(azureSettings())(context, prompt, signal));
+  const agentCompletion = complete ? undefined : createAzureAgentCompletion(azureSettings());
   const inFlight = new Set<string>();
   router.get("/status", asyncRoute(async (req, res) => {
     res.json({ configured: Boolean(azureSettings()), scope: principal(req).role === "SALES" ? "own" : "company", actions });
@@ -39,20 +58,26 @@ export function createCopilotRouter(complete?: Completion) {
     try {
       const context = await retrieveContext(user, input);
       controller.signal.throwIfAborted();
-      let result = context.salesRanking
+      const runCompletion = (prompt: string) => agentCompletion && !input.recordId
+        ? agentCompletion(context.context, prompt, controller.signal,
+          (name, args) => executeCopilotTool(name, args, user, context.sources))
+        : completion(context.context, prompt, controller.signal);
+      let result = context.visualization
+        ? visualizationAnswer(context.visualization)
+        : context.salesRanking
         ? { answer: salesRankingAnswer(context.salesRanking), truncated: false }
-        : await completion(context.context, input.prompt, controller.signal);
+        : await runCompletion(input.prompt);
       const validReferences = new Set(context.sources.map(source => source.ref));
       const hasUnknownReference = (answer: string) => [...answer.matchAll(/\[(S\d+)\]/g)].some(match => !validReferences.has(match[1]!));
-      if (!context.salesRanking && hasUnknownReference(result.answer)) {
+      if (!context.salesRanking && !context.visualization && hasUnknownReference(result.answer)) {
         controller.signal.throwIfAborted();
         const correction = validReferences.size
           ? `Gunakan hanya rujukan berikut pada fakta yang cocok: ${[...validReferences].map(ref => `[${ref}]`).join(", ")}. Agregat tanpa ref harus dijelaskan tanpa sitasi.`
           : "Hasil kueri ini hanya berisi agregat tanpa rujukan individual. Jangan tulis sitasi [S...] apa pun; jelaskan angka agregat langsung dari fakta.";
-        result = await completion(context.context, `${input.prompt}\n\nValidasi server: jawaban sebelumnya ditolak karena sitasi tidak tersedia. Tulis ulang berdasarkan fakta yang sama. ${correction}`, controller.signal);
+        result = await runCompletion(`${input.prompt}\n\nValidasi server: jawaban sebelumnya ditolak karena sitasi tidak tersedia. Tulis ulang berdasarkan fakta yang sama. ${correction}`);
         if (hasUnknownReference(result.answer)) throw new HttpError(502, "Jawaban Copilot memuat rujukan yang tidak tersedia dalam hasil kueri, termasuk setelah satu percobaan perbaikan otomatis. Silakan kirim ulang pertanyaan.");
       }
-      if (!res.destroyed) res.json({ ...result, action: context.action, answerSource: context.salesRanking ? "database" : "ai", visualization: context.visualization, sources: context.sources, scope: context.scope, asOf: context.asOf, contextBytes: context.bytes });
+      if (!res.destroyed) res.json({ ...result, action: context.action, answerSource: context.visualization ? "visualization" : context.salesRanking ? "database" : result.toolsUsed ? "tools" : "ai", visualization: context.visualization, sources: context.sources, scope: context.scope, asOf: context.asOf, contextBytes: context.bytes });
     } catch (error) {
       if (!controller.signal.aborted) throw error;
     } finally {

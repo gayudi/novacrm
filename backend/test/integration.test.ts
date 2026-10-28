@@ -112,6 +112,39 @@ test("contacts, leads, opportunities and activities implement full CRUD with rel
   await request(app).get("/leads?status=INVALID").set(headers()).expect(400);
 });
 
+test("lead and opportunity product choices validate the catalog and preserve existing selections", async () => {
+  const product = await db.product.findUniqueOrThrow({ where: { id: productId } });
+  const inactive = await db.product.create({ data: { ...productInput(), sku: `${prefix}-INACTIVE`, active: false } });
+  for (const path of ["leads", "opportunities"]) {
+    const input = path === "leads"
+      ? { name: `${prefix} Product lead`, phone: "+6281234567890", source: "WEBSITE", status: "NEW", ownerId: salesId }
+      : { name: `${prefix} Product deal`, stage: "PROPOSAL", value: 5000000, probability: 55, expectedCloseDate: new Date().toISOString(), ownerId: salesId, customerId };
+    const asSales = { Authorization: `Bearer ${salesToken}` };
+    for (const invalidId of ["missing-product", inactive.id]) {
+      await request(app).post(`/${path}`).set(asSales).send({ ...input, productId: invalidId }).expect(400);
+    }
+    const created = (await request(app).post(`/${path}`).set(asSales).send({ ...input, productId }).expect(201)).body;
+    const detail = (await request(app).get(`/${path}/${created.id}`).set(asSales).expect(200)).body;
+    assert.equal(detail.product.id, productId);
+    assert.equal(detail.product.name, product.name);
+    if (path === "leads") assert.equal(detail.interest, product.name);
+    await db.product.update({ where: { id: productId }, data: { active: false } });
+    await request(app).put(`/${path}/${created.id}`).set(asSales).send({ ...input, productId }).expect(200);
+    await request(app).put(`/${path}/${created.id}`).set(asSales).send({ ...input, productId: inactive.id }).expect(400);
+    await request(app).put(`/${path}/${created.id}`).set(asSales).send({ ...input, productId: null }).expect(200);
+    const cleared = (await request(app).get(`/${path}/${created.id}`).set(asSales).expect(200)).body;
+    assert.equal(cleared.productId, null);
+    if (path === "leads") assert.equal(cleared.interest, null);
+    await request(app).delete(`/${path}/${created.id}`).set(headers()).expect(204);
+    await db.product.update({ where: { id: productId }, data: { active: true } });
+  }
+  const legacy = { name: `${prefix} Legacy interest`, phone: "+6281234567890", source: "WEBSITE", status: "NEW", ownerId: salesId, interest: "Previous free-text interest" };
+  const created = (await request(app).post("/leads").set(headers()).send(legacy).expect(201)).body;
+  const updated = (await request(app).put(`/leads/${created.id}`).set(headers()).send({ ...legacy, notes: "Other edit" }).expect(200)).body;
+  assert.equal(updated.interest, legacy.interest);
+  await request(app).delete(`/leads/${created.id}`).set(headers()).expect(204);
+});
+
 test("products and users implement CRUD; account updates revoke tokens", async () => {
   const product = await request(app).post("/products").set("Authorization", `Bearer ${managerToken}`).send({ ...productInput(), sku: `${prefix}-EXTRA` }).expect(201);
   await request(app).get(`/products/${product.body.id}`).set(headers()).expect(200);

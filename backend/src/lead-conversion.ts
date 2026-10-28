@@ -67,7 +67,7 @@ leadConversionRouter.post("/:id/convert", asyncRoute(async (req, res) => {
     const opportunity = await tx.opportunity.create({
       data: {
         ...input.opportunity, stage: "QUALIFIED", customerId, ownerId: lead.ownerId,
-        branch: lead.branch, notes: lead.notes,
+        branch: lead.branch, notes: lead.notes, productId: lead.productId,
       },
       select: { id: true, name: true, customerId: true },
     });

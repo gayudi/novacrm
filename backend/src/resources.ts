@@ -12,13 +12,21 @@ import { serializable } from "./transactions.js";
 
 const owner = { select: { id: true, name: true } };
 const customer = { select: { id: true, name: true } };
+const product = { select: { id: true, name: true, active: true } };
 const leadInclude = (user: Principal) => ({
-  owner, customer, convertedOpportunity: { where: opportunityScope(user), select: { id: true, name: true } },
+  owner, customer, product, convertedOpportunity: { where: opportunityScope(user), select: { id: true, name: true } },
 });
 const opportunityInclude = (user: Principal) => ({
-  owner, customer, sourceLead: { where: leadScope(user), select: { id: true, name: true } },
+  owner, customer, product, sourceLead: { where: leadScope(user), select: { id: true, name: true } },
 });
 export const resources = Router();
+
+async function validateProduct(client: Prisma.TransactionClient, productId?: string | null, previousId?: string | null) {
+  if (!productId) return null;
+  const found = await client.product.findUnique({ where: { id: productId }, select: { name: true, active: true } });
+  if (!found || (!found.active && productId !== previousId)) throw new HttpError(400, "Pilih produk aktif dari katalog produk.");
+  return found;
+}
 
 async function validateOwner(ownerId: string, user: Principal) {
   assertAssignment(user, ownerId);
@@ -80,7 +88,10 @@ resources.use("/leads", crud(leadSchema, {
   create: async (data, req) => {
     if (data.status === "CONVERTED") throw new HttpError(400, "Gunakan fitur konversi untuk mengubah lead menjadi Converted.");
     await validateOwner(data.ownerId, principal(req)); await assertLinks(principal(req), data);
-    return db.lead.create({ data });
+    return serializable(async tx => {
+      const selected = await validateProduct(tx, data.productId);
+      return tx.lead.create({ data: { ...data, ...(data.productId !== undefined ? { interest: selected?.name ?? null } : {}) } });
+    });
   },
   update: async (id, data, req) => {
     await validateOwner(data.ownerId, principal(req)); await assertLinks(principal(req), data);
@@ -89,7 +100,8 @@ resources.use("/leads", crud(leadSchema, {
       if (!previous) throw new HttpError(404, "Lead tidak ditemukan.");
       if (data.status !== previous.status && (data.status === "CONVERTED" || previous.status === "CONVERTED")) throw new HttpError(409, "Status Converted hanya dikelola melalui fitur konversi dan tidak dapat diubah manual.");
       if (previous.convertedAt && (data.ownerId !== previous.ownerId || (data.customerId ?? null) !== previous.customerId)) throw new HttpError(409, "Pemilik dan customer lead hasil konversi merupakan riwayat tetap. Kelola proses penjualan melalui opportunity.");
-      return tx.lead.update({ where: { id }, data });
+      const selected = await validateProduct(tx, data.productId, previous.productId);
+      return tx.lead.update({ where: { id }, data: { ...data, ...(data.productId !== undefined ? { interest: selected?.name ?? null } : {}) } });
     });
   },
   remove: id => serializable(async tx => {
@@ -113,8 +125,23 @@ resources.use("/opportunities", crud(opportunitySchema, {
     return { data, total };
   },
   get: (id, req) => db.opportunity.findFirst({ where: { ...opportunityScope(principal(req)), id }, include: opportunityInclude(principal(req)) }),
-  create: async (data, req) => { await validateOwner(data.ownerId, principal(req)); await assertLinks(principal(req), data); return db.opportunity.create({ data }); },
-  update: async (id, data, req) => { await validateOwner(data.ownerId, principal(req)); await assertLinks(principal(req), data); return db.opportunity.update({ where: { ...opportunityScope(principal(req)), id }, data }); },
+  create: async (data, req) => {
+    await validateOwner(data.ownerId, principal(req)); await assertLinks(principal(req), data);
+    return serializable(async tx => {
+      await validateProduct(tx, data.productId);
+      return tx.opportunity.create({ data });
+    });
+  },
+  update: async (id, data, req) => {
+    const user = principal(req);
+    await validateOwner(data.ownerId, user); await assertLinks(user, data);
+    return serializable(async tx => {
+      const previous = await tx.opportunity.findFirst({ where: { ...opportunityScope(user), id } });
+      if (!previous) throw new HttpError(404, "Peluang tidak ditemukan.");
+      await validateProduct(tx, data.productId, previous.productId);
+      return tx.opportunity.update({ where: { id }, data });
+    });
+  },
   remove: id => db.opportunity.delete({ where: { id } }),
 }));
 

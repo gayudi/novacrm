@@ -39,7 +39,8 @@ function Details({ resource, record, onConvert }: { resource: Resource; record: 
     {resource.key === "opportunities" && typeof getValue(record, "sourceLead.id") === "string" && <p className="mt-4 text-xs">Lead asal: <Link className="font-medium text-primary underline" to={`/leads?record=${encodeURIComponent(String(getValue(record, "sourceLead.id")))}`}>{String(getValue(record, "sourceLead.name"))}</Link></p>}
     <dl className="mt-6 grid gap-5 sm:grid-cols-2">{displayFields.map(field => {
       const relation = field.key.endsWith("Id") ? field.key.slice(0, -2) : "";
-      const value = field.type === "reference" ? getValue(record, `${relation === "owner" ? "owner" : relation}.name`) : record[field.key];
+      const value = field.type === "product" ? getValue(record, "product.name") ?? record.interest
+        : field.type === "reference" ? getValue(record, `${relation === "owner" ? "owner" : relation}.name`) : record[field.key];
       return <div key={field.key} className={field.wide ? "sm:col-span-2" : ""}><dt className="text-[10px] font-medium uppercase tracking-wide text-slate-400">{field.label}</dt><dd className="mt-1.5 whitespace-pre-wrap break-words text-sm"><CellValue value={value} format={field.type === "datetime-local" ? resource.key === "transactions" ? "datetime" : "date" : field.type === "checkbox" ? "boolean" : field.key === "price" || field.key === "value" ? "money" : field.type === "select" ? "badge" : undefined} /></dd></div>;
     })}</dl>
     {lineItems.length > 0 && <div className="mt-6 border-t pt-4"><h3 className="mb-3 text-sm font-semibold">Purchased products</h3>{lineItems.map(item => {

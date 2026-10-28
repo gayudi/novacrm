@@ -67,6 +67,56 @@ Permissions are enforced in the API, not only in the UI. Users cannot delete or 
 
 Customers, leads, opportunities and activities use `ownerId`; contacts inherit their customer's owner; transactions use `salespersonId`. Sales cannot assign to someone else or link another user's customer/opportunity. **Existing cross-owner relationships are not rewritten**: rows linked to a foreign-owned customer/opportunity are hidden from Sales, even if the primary row is assigned to them, so nested details cannot disclose another person's records. Admins/Managers must align ownership before handing over such records. Deletion remains restricted to Admin/Manager; products remain a shared catalogue.
 
+## Existing Linux VM deployment
+
+Lead and Opportunity forms use a searchable **Product interest** selector
+from the Products catalog. New choices must be active catalog products;
+existing inactive choices can be kept when editing. The selected product
+is saved as a product reference and carried from a lead into its converted
+opportunity. Choosing a product does not change stock or automatically set
+the opportunity value. Legacy lead interest text is preserved; the migration
+links only unique exact catalog-name matches, leaving ambiguous/unmatched
+text unchanged. Product selection remains optional.
+
+For a shared demo VM, use the normal Compose file together with
+`docker-compose.vm.yml`. This keeps the PostgreSQL and API ports private, adds
+per-service memory/CPU limits and rotating logs, and provides a Caddy HTTPS
+gateway with persistent certificate storage.
+
+Set these additional values in the private `.env` on the VM:
+
+```dotenv
+APP_BIND_ADDRESS=127.0.0.1
+APP_PORT=18080
+NOVA_DOMAIN=your-hostname.example.com
+```
+
+Use unique random database and account passwords and a JWT secret, not the
+local demo defaults. Point the hostname to the VM public IP and allow inbound
+TCP 80 and 443 for HTTPS issuance/renewal and HTTP redirects. Do not expose
+PostgreSQL or the backend API separately.
+
+```bash
+docker compose -p novacrm -f docker-compose.yml -f docker-compose.vm.yml build
+docker compose -p novacrm -f docker-compose.yml -f docker-compose.vm.yml up -d --wait
+docker compose -p novacrm -f docker-compose.yml -f docker-compose.vm.yml ps
+```
+
+The deployed demo uses `https://sisagent.indonesiacentral.cloudapp.azure.com`
+and `/opt/apps/novacrm` on the existing VM. Credentials remain in the VM's
+private `.env`; a private local login copy is kept in
+`.runtime/novacrm-vm-login.txt` and is ignored by Git. Never publish either
+file. Deployment starts a separate `novacrm` project and does not stop or
+modify existing ERPNext containers.
+
+The gateway reserves ports 80/443. Additional applications must use unique
+Compose project names, volumes and private host ports; extend the existing
+gateway with their domain routing rather than binding another gateway to
+80/443. The limits are per service, not a guarantee that five applications
+will fit in a 4 GB VM under load. Monitor actual usage before adding more.
+Persistent volumes are not backups: retain database dumps off the VM and
+never run `down -v` on data you want to keep.
+
 ## Azure OpenAI Copilot
 
 ### Guided deployment on Windows
@@ -88,6 +138,8 @@ This execution-policy setting applies only to that PowerShell process. The wizar
 Azure charges are separate from Copilot subscriptions. Capacity is throughput quota, **not a spending cap**. Check [Azure pricing](https://azure.microsoft.com/pricing/details/cognitive-services/openai-service/) and configure Cost Management budgets/alerts. Catalogue availability does not guarantee subscription quota or regional capacity. GlobalStandard may process inference outside the chosen resource region; review your data-residency policy. The new-resource workflow uses a key-authenticated public endpoint for local evaluation, not a private-network production deployment.
 
 The wizard never modifies existing deployments, rotates keys, or automatically deletes resources. Failed provisioning can leave a newly created resource/group; inspect it in Azure Portal, correct quota/permissions, then rerun using the existing-deployment option. Deleting a resource can affect other applications, so cleanup is deliberately manual. Do not run secret-bearing setup with PowerShell transcription, shell tracing or Azure CLI debug logging enabled. Keep `.env` private.
+
+For open-ended CRM questions, the backend can let Azure OpenAI choose between two read-only function tools: `crm_analyze` for validated, bounded aggregates and `crm_search` for a small set of safe record fields. The server validates every argument, applies the same Sales ownership filters as the CRM API, and runs fixed Prisma queries; the model has no SQL or write access. Tool use is bounded to four model rounds, six calls, ten records per search, and 24 KB per tool result. Unsupported filters are reported rather than silently ignored. Catalog searches and aggregates use `all_time`; sales performance by product should query the `sales` area, not catalog stock. Record searches add permission-checked source references for the normal Copilot source controls. These tools augment existing prepared tasks and do not give the Copilot general internet or knowledge-base access.
 
 For a no-login/no-cloud prerequisite check and offline wizard tests:
 
@@ -189,7 +241,7 @@ Supported datasets and **fixed reporting periods**:
 | Opportunity stages | Current count at each stage across permitted opportunities; includes won/lost |
 | Sales process | Fixed illustrative flow with current stage counts; combines QUALIFIED/QUALIFICATION; **not historical transitions, an enforced workflow, or conversion rates** |
 
-Bar, line and pie charts can use any numeric dataset. The flow diagram uses the sales-process dataset only. Each visual includes its reporting scope/period, units and an accessible exact-value table. Empty/zero data shows a clear message instead of inventing a chart. The model supplies only explanatory text; chart values come directly from the same bounded PostgreSQL snapshot sent to the model. The frontend does not execute AI-generated HTML, JavaScript, SVG or Mermaid. No external rendering service is used.
+Bar, line and pie charts render the supported CRM datasets above; the flow diagram uses the sales-process dataset only. Natural requests such as "buat grafik batang penjualan bulanan" are resolved to a supported dataset. The server reads permission-scoped PostgreSQL values, returns the chart data and a deterministic summary, and the React/Recharts frontend renders the visual; a model response is not required for a chart to appear. Each visual includes its reporting scope/period, units and an accessible exact-value table. Empty/zero data shows a clear message instead of inventing a chart. The frontend does not execute AI-generated HTML, JavaScript, SVG or Mermaid. No external rendering service is used.
 
 Natural-language routing recognizes supported topics, not arbitrary analytics. One visual is returned per request. Arbitrary custom date ranges, branch filters and other text filters are **not applied**; the visual explicitly states its actual period and the explanation must disclose unsupported filters. For a different supported metric/type, choose the controls or ask again from Ringkasan eksekutif. Unknown topics and requests to chart a selected individual record produce an explicit error. Earlier messages are not retained as model context, so restate the subject rather than saying only "turn that into a chart."
 
