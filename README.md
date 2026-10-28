@@ -21,6 +21,64 @@ docker compose logs -f backend
 
 All three services should become healthy. The frontend is started only after the backend is healthy.
 
+### Existing Windows local runtime (global Node.js)
+
+For the existing non-Docker Windows setup, use the installed Node.js in
+`C:\Program Files\nodejs`, not the former portable executable in a Copilot
+session folder. Close all VS Code windows and reopen after installing Node
+so new terminals inherit the Windows PATH. Verify `where.exe node`,
+`node --version` and `npm.cmd --version`. Node 22 or newer is required;
+the Windows runtime has been checked with Node 24.22.1, while Docker remains
+on Node 22.
+
+The local database now uses PostgreSQL 18 Windows Service
+`postgresql-x64-18` (automatic startup), on `127.0.0.1:5432` with database
+`nova_crm_local`. The application connects as `nova`, without superuser,
+create-role or create-database privileges. Its password and JWT secret remain
+private under `.runtime`. Open two PowerShell terminals at the repository root:
+
+```powershell
+# Terminal 1: existing compiled backend, port 3000
+.\scripts\start-local.ps1 -Service backend
+
+# Terminal 2: built frontend preview, http://127.0.0.1:4173
+.\scripts\start-local.ps1 -Service frontend
+```
+
+The launcher uses global Node explicitly, reuses the local database and JWT
+secret, and reads the existing Azure OpenAI settings without printing them.
+It does not install dependencies, regenerate Prisma, apply migrations or seed
+data. It refuses to start over an occupied application port. Stop a service
+with Ctrl+C in its terminal. The backend launcher uses the existing compiled
+output; source changes require a separate build and, where applicable, a
+reviewed database migration. Frontend source changes require
+`npm.cmd run build --workspace frontend`.
+
+This local runtime change does not alter Azure VM containers or their data.
+During the initial global-Node cutover, the previously pending product-interest
+migration was also applied locally with approval so the database matches the
+current Prisma client. A clean offline PostgreSQL 17 cluster backup was retained
+at `.runtime/postgres-before-global-node-20261028`; all backup files were checked
+with SHA-256, and existing business-field values and row counts were verified
+unchanged after the additive migration. Keep this backup private. No seed was
+run during the cutover.
+
+The subsequent PostgreSQL 17-to-18 local migration used PostgreSQL 18
+`pg_dump`/`pg_restore`, not a data-directory copy. The final logical backup is
+`.runtime/postgres17-final-before18-20261028.dump`. All 11 public tables,
+complete row fingerprints/counts, column definitions/nullability, foreign keys,
+indexes and sequences were compared before switching the application. No seed
+was run. The old portable cluster remains at `.runtime/postgres` but is stopped;
+do not delete it or backups until they are no longer needed.
+
+For an intentional rollback, start that original PostgreSQL 17 cluster on
+port 55439 and launch the backend with
+`.\scripts\start-local.ps1 -Service backend -DatabasePort 55439`.
+Stop the current backend first; only one backend can use port 3000.
+The old cluster is a cutover snapshot, not a synchronized replica: writes made
+on PostgreSQL 18 after cutover will not exist there. Do not silently switch back
+after new writes without planning data reconciliation.
+
 ### Demo accounts
 
 | Role | Email | Password |
