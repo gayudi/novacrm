@@ -67,6 +67,26 @@ Permissions are enforced in the API, not only in the UI. Users cannot delete or 
 
 Customers, leads, opportunities and activities use `ownerId`; contacts inherit their customer's owner; transactions use `salespersonId`. Sales cannot assign to someone else or link another user's customer/opportunity. **Existing cross-owner relationships are not rewritten**: rows linked to a foreign-owned customer/opportunity are hidden from Sales, even if the primary row is assigned to them, so nested details cannot disclose another person's records. Admins/Managers must align ownership before handing over such records. Deletion remains restricted to Admin/Manager; products remain a shared catalogue.
 
+## Excel reports
+
+Every resource-page export (Customers, Contacts, Leads, Opportunities,
+Activities, Products, Sales transactions and Team management) downloads a real
+`.xlsx` workbook using the **Export Excel (page)** button. Reports share a
+navy-and-gold Nova cover header, preparation timestamp/name, access scope,
+active filters, exported/matching record counts, alternating row fills and
+status colors. Column headings and the first column stay frozen; Excel filters,
+column widths, wrapping and landscape print settings are included.
+
+Exports contain **only the currently displayed page**, not all matching records.
+Currency, stock and probability remain numeric with Excel formatting. Dates
+use WIB (UTC+7), explicitly labeled in the workbook. Rupiah columns include a
+page subtotal that updates when filtering rows in Excel; opportunity values
+and pending/cancelled transaction amounts are not relabeled as realized revenue.
+Phone numbers, SKU codes and formula-looking user text remain plain text.
+Only the configured report columns and secondary display field are exported,
+never passwords, tokens or unrestricted raw API objects. The Excel library
+loads on demand when exporting rather than on initial navigation.
+
 ## Existing Linux VM deployment
 
 Lead and Opportunity forms use a searchable **Product interest** selector

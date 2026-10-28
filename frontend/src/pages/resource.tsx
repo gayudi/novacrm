@@ -51,12 +51,6 @@ function Details({ resource, record, onConvert }: { resource: Resource; record: 
   </DialogContent>;
 }
 
-function csvCell(value: unknown) {
-  let text = String(value ?? "");
-  if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
-  return `"${text.replaceAll('"', '""')}"`;
-}
-
 export function ResourcePage({ resource }: { resource: Resource }) {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -80,6 +74,7 @@ export function ResourcePage({ resource }: { resource: Resource }) {
   const [conversion, setConversion] = useState<EntityRecord | null>(null);
   const [deleting, setDeleting] = useState<EntityRecord | null>(null);
   const [pendingDelete, setPendingDelete] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
   const canWrite = user?.role !== "SALES" || !resource.restrictedWrite;
   const canDelete = user?.role !== "SALES";
@@ -133,13 +128,27 @@ export function ResourcePage({ resource }: { resource: Resource }) {
     return () => controller.abort();
   }, [resource.key, page, query, status, revision, isTransactions, branch, salespersonId, period]);
   const reload = useCallback(() => setRevision(n => n + 1), []);
-  function exportPage() {
-    if (!result?.data.length || loading || error) return;
-    const columns = [{ key: resource.primary, label: resource.singular }, ...resource.columns];
-    const csv = [columns.map(c => csvCell(c.label)).join(","), ...result.data.map(row => columns.map(c => csvCell(getValue(row, c.key))).join(","))].join("\r\n");
-    const url = URL.createObjectURL(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8;" }));
-    const anchor = document.createElement("a"); anchor.href = url; anchor.download = `nova-${resource.key}-page-${page}.csv`; anchor.click(); URL.revokeObjectURL(url);
-    toast.success("Current page exported.");
+  async function exportPage() {
+    if (!result?.data.length || loading || error || exporting) return;
+    setExporting(true);
+    try {
+      const { downloadResourceExcel } = await import("@/lib/excel-export");
+      const filters = [
+        query && `Search: ${query}`,
+        status && `${resource.key === "opportunities" ? "Stage" : "Status"}: ${humanize(status)}`,
+        isTransactions && branch && `Branch: ${humanize(branch)}`,
+        isTransactions && salespersonId && `Salesperson: ${salespeople.find(person => person.id === salespersonId)?.name ?? salespersonId}`,
+        isTransactions && period !== "all" && `Period: ${humanize(period)} (WIB)`,
+      ].filter(Boolean).join(" | ");
+      await downloadResourceExcel(resource, result, {
+        preparedBy: user?.name ?? "CRM user",
+        scope: user?.role === "SALES" && !["products", "users"].includes(resource.key) ? "Your permitted records only" : "All permitted records",
+        filters: filters || "All records - no additional filters",
+      });
+      toast.success(`Excel ready: ${result.data.length} records from the current page.`);
+    } catch (err) {
+      toast.error(err instanceof Error ? `Excel export failed: ${err.message}` : "Excel export failed. Please try again.");
+    } finally { setExporting(false); }
   }
   async function remove() {
     if (!deleting) return;
@@ -151,7 +160,7 @@ export function ResourcePage({ resource }: { resource: Resource }) {
     finally { setPendingDelete(false); }
   }
   return <div className="space-y-6">
-    <div className="flex flex-wrap items-start justify-between gap-4"><div><p className="eyebrow mb-2 text-primary">{resource.key === "users" ? "Administration" : "Your connected workspace"}</p><div className="flex items-center gap-3"><h1 className="page-heading">{resource.title}</h1>{result && <span className="rounded-full border bg-white px-2.5 py-0.5 text-xs font-medium text-slate-500">{result.total}</span>}</div><p className="mt-2 text-xs leading-5 text-muted-foreground">{resource.description}</p></div><div className="flex gap-2"><Button variant="outline" size="sm" className="h-9" onClick={exportPage} disabled={!result?.data.length || loading || Boolean(error)}><ArrowDownToLine />Export page</Button>{canWrite && <Button size="sm" className="h-9" onClick={() => setEditor("new")}><Plus />New {resource.singular}</Button>}</div></div>
+    <div className="flex flex-wrap items-start justify-between gap-4"><div><p className="eyebrow mb-2 text-primary">{resource.key === "users" ? "Administration" : "Your connected workspace"}</p><div className="flex items-center gap-3"><h1 className="page-heading">{resource.title}</h1>{result && <span className="rounded-full border bg-white px-2.5 py-0.5 text-xs font-medium text-slate-500">{result.total}</span>}</div><p className="mt-2 text-xs leading-5 text-muted-foreground">{resource.description}</p></div><div className="flex gap-2"><Button variant="outline" size="sm" className="h-9" onClick={() => void exportPage()} disabled={!result?.data.length || loading || Boolean(error) || exporting} title="Download the current page as a styled Excel workbook" aria-busy={exporting}>{exporting ? <Loader2 className="animate-spin" /> : <ArrowDownToLine />}{exporting ? "Preparing Excel..." : "Export Excel (page)"}</Button>{canWrite && <Button size="sm" className="h-9" onClick={() => setEditor("new")}><Plus />New {resource.singular}</Button>}</div></div>
     <Card className="overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b p-4"><div className="flex flex-wrap items-center gap-3"><div className="relative w-full sm:w-64"><Search className="absolute left-3 top-2.5 size-4 text-slate-400" /><Input value={search} onChange={e => setSearch(e.target.value)} aria-label={`Search ${resource.title.toLowerCase()}`} placeholder={`Search ${resource.title.toLowerCase()}...`} className="h-9 border-slate-200 pl-9 pr-8 text-xs shadow-none" />{search && <button className="absolute right-2 top-2.5 text-slate-400" onClick={() => setSearch("")} aria-label="Clear search"><X className="size-4" /></button>}</div>{resource.statuses && <div className="flex h-9 items-center gap-2 rounded-md border px-3"><Filter className="size-3.5 text-slate-400" /><select aria-label="Filter by status" className="max-w-40 bg-transparent text-xs outline-none" value={status} onChange={e => { setStatus(e.target.value); setPage(1); }}><option value="">All {resource.key === "opportunities" ? "stages" : "statuses"}</option>{resource.statuses.map(s => <option key={s} value={s}>{humanize(s)}</option>)}</select></div>}</div><div className="flex items-center gap-3"><span className="hidden text-[10px] text-slate-400 md:block">{loading ? "Updating..." : `${result?.total ?? 0} records${hasFilters ? " matching filters" : " in your workspace"}`}</span><Button variant="ghost" size="icon" aria-label="Refresh records" onClick={reload} disabled={loading}><RefreshCw className={cn("text-slate-400", loading && "animate-spin")} /></Button></div></div>
       {isTransactions && <div className="space-y-3 border-b bg-slate-50/60 p-4">
